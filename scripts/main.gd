@@ -18,6 +18,7 @@ var rear_compression := 0.0
 var front_compression := 0.0
 var dust_timer := 0.0
 var dust: GPUParticles3D
+var imported_motorcycle: Node3D
 
 func mat(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -117,6 +118,17 @@ func _ready() -> void:
 		mountain.rotation.z = 0.2
 	bike = Node3D.new()
 	add_child(bike)
+	# Optional licensed Honda CRF 450 GLB. No unverified download URLs.
+	# Fallback geometry remains until asset is present and successfully imported.
+	if ResourceLoader.exists("res://assets/honda_crf450.glb"):
+		var scene := load("res://assets/honda_crf450.glb") as PackedScene
+		if scene != null:
+			imported_motorcycle = scene.instantiate() as Node3D
+			if imported_motorcycle != null:
+				bike.add_child(imported_motorcycle)
+				imported_motorcycle.rotation.y = PI / 2.0
+				imported_motorcycle.position.y = -0.43
+
 	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
 	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))
 	cube(bike, Vector3(0.78, 0.12, 0.45), Vector3(-0.35, 1.16, 0), Color(0.1, 0.11, 0.13))
@@ -136,6 +148,11 @@ func _ready() -> void:
 	helmet.position = Vector3(-0.13, 2.19, 0)
 	helmet.material_override = mat(Color(0.98, 0.65, 0.08))
 	bike.add_child(helmet)
+	if is_instance_valid(imported_motorcycle):
+		# Hide only fallback visual meshes, retaining the imported asset.
+		for node in bike.get_children():
+			if node != imported_motorcycle:
+				node.visible = false
 	var ui := CanvasLayer.new()
 	add_child(ui)
 	var root := Control.new()

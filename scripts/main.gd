@@ -126,8 +126,15 @@ func _ready() -> void:
 			imported_motorcycle = scene.instantiate() as Node3D
 			if imported_motorcycle != null:
 				bike.add_child(imported_motorcycle)
-				imported_motorcycle.rotation.y = PI / 2.0
-				imported_motorcycle.position.y = -0.43
+				# Sketchfab FBX uses Y as longitudinal and Z as vertical.
+				# Transform source axes: X->Z, Y->X, Z->Y.
+				imported_motorcycle.basis = Basis(
+					Vector3(0, 0, 1),
+					Vector3(1, 0, 0),
+					Vector3(0, 1, 0)
+				)
+				imported_motorcycle.scale = Vector3.ONE * 0.048
+				imported_motorcycle.position = Vector3(0.02, 1.65, 0.01)
 
 	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
 	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))
@@ -149,7 +156,7 @@ func _ready() -> void:
 	helmet.material_override = mat(Color(0.98, 0.65, 0.08))
 	bike.add_child(helmet)
 	if is_instance_valid(imported_motorcycle):
-		# Hide only fallback visual meshes, retaining the imported asset.
+		# Keep original fallback wheel nodes for wheel physics, hide only their visuals.
 		for node in bike.get_children():
 			if node != imported_motorcycle:
 				node.visible = false

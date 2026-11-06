@@ -15,6 +15,12 @@ var turn = 0.0
 var finished = false
 var held = {"gas": false, "brake": false, "back": false, "forward": false}
 var terrain: Node3D
+var wheel_nodes: Array[MeshInstance3D] = []
+var rider: Node3D
+var suspension = [0.0, 0.0]
+var angular_velocity = 0.0
+var grounded = false
+var last_speed = 0.0
 
 func material(c: Color) -> StandardMaterial3D:
 	var m = StandardMaterial3D.new()
@@ -104,6 +110,11 @@ func load_level(n: int) -> void:
 	vertical = 0.0
 	tilt = 0.0
 	turn = 0.0
+	angular_velocity = 0.0
+	grounded = false
+	last_speed = 0.0
+	suspension = [0.0, 0.0]
+	wheel_nodes.clear()
 	finished = false
 	if is_instance_valid(terrain):
 		terrain.queue_free()
@@ -136,7 +147,10 @@ func load_level(n: int) -> void:
 		wheel.position = Vector3(offset, 0.0, 0)
 		wheel.material_override = material(Color(0.08, 0.09, 0.1))
 		bike.add_child(wheel)
-	box(bike, Vector3(0.34, 0.85, 0.4), Vector3(-0.3, 1.85, 0), Color(0.18, 0.25, 0.65))
+		wheel_nodes.append(wheel)
+	rider = Node3D.new()
+	bike.add_child(rider)
+	box(rider, Vector3(0.34, 0.85, 0.4), Vector3(-0.3, 1.85, 0), Color(0.18, 0.25, 0.65))
 	var head = MeshInstance3D.new()
 	var sphere = SphereMesh.new()
 	sphere.radius = 0.34
@@ -144,7 +158,12 @@ func load_level(n: int) -> void:
 	head.mesh = sphere
 	head.position = Vector3(-0.12, 2.52, 0)
 	head.material_override = material(Color(0.96, 0.74, 0.12))
-	bike.add_child(head)
+	rider.add_child(head)
+	# Fork, swingarm, handlebars and exhaust
+	box(bike, Vector3(0.12, 1.3, 0.22), Vector3(0.92, 0.55, 0), Color(0.72, 0.76, 0.8))
+	box(bike, Vector3(0.9, 0.13, 0.22), Vector3(-0.53, 0.38, 0), Color(0.65, 0.68, 0.72))
+	box(bike, Vector3(0.5, 0.11, 0.9), Vector3(0.87, 1.27, 0), Color(0.12, 0.13, 0.15))
+	box(bike, Vector3(0.75, 0.19, 0.22), Vector3(-0.6, 0.8, -0.4), Color(0.6, 0.61, 0.64))
 
 func _physics_process(delta: float) -> void:
 	if finished:
@@ -153,31 +172,67 @@ func _physics_process(delta: float) -> void:
 	var gas = held["gas"] or Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D)
 	var brake = held["brake"] or Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A)
 	var lean = float(int(held["forward"] or Input.is_key_pressed(KEY_UP))) - float(int(held["back"] or Input.is_key_pressed(KEY_DOWN)))
-	speed += (19.0 if gas else -12.0 if brake else -3.5) * delta
-	speed = clampf(speed, -8.0, 24.0)
+	var wheel_radius = 0.52
+	var rear_x = x - cos(tilt) * 0.95
+	var front_x = x + cos(tilt) * 0.95
+	var rear_y = height - sin(tilt) * 0.95
+	var front_y = height + sin(tilt) * 0.95
+	var rear_penetration = ground_at(rear_x) + wheel_radius - rear_y
+	var front_penetration = ground_at(front_x) + wheel_radius - front_y
+	var rear_contact = rear_penetration > -0.07
+	var front_contact = front_penetration > -0.07
+	grounded = rear_contact or front_contact
+	var throttle_force = 0.0
+	if gas:
+		throttle_force = 18.0 if rear_contact else 2.0
+	elif brake:
+		throttle_force = -25.0 if grounded else -1.0
+	else:
+		throttle_force = -4.0 if grounded else -0.5
+	speed += throttle_force * delta
+	speed = clampf(speed, -7.0, 25.0)
+	var previous_x = x
 	x = clampf(x + speed * delta, 0.0, 235.0)
-	vertical -= 24.0 * delta
+	if grounded:
+		var slope = atan2(ground_at(front_x) - ground_at(rear_x), 1.9)
+		var compression = maxf(0.0, maxf(rear_penetration, front_penetration))
+		vertical += (compression * 105.0 - vertical * 13.0) * delta
+		angular_velocity += (slope - tilt) * (9.0 if rear_contact and front_contact else 3.0) * delta
+		angular_velocity += (front_penetration - rear_penetration) * 2.4 * delta
+		angular_velocity += lean * 5.0 * delta
+		if gas and rear_contact:
+			angular_velocity += 1.15 * delta
+		angular_velocity *= maxf(0.0, 1.0 - 3.0 * delta)
+	else:
+		angular_velocity += lean * 4.2 * delta
+		angular_velocity *= maxf(0.0, 1.0 - 0.18 * delta)
+	vertical -= 23.0 * delta
 	height += vertical * delta
-	var left_y = ground_at(x - 0.95)
-	var right_y = ground_at(x + 0.95)
-	var target = maxf(left_y, right_y) + 0.54
-	if height <= target:
-		height = target
-		vertical = maxf(0.0, vertical)
-		var desired = atan2(right_y - left_y, 1.9)
-		turn += (desired - tilt) * 8.0 * delta
-	turn += lean * 3.3 * delta
-	turn *= 0.97
-	tilt += turn * delta
-	if absf(tilt) > 1.45:
-		speed = 0
-		label.text = "CRASH! Tap RESTART"
+	tilt += angular_velocity * delta
+	# Prevent wheels from tunneling into terrain after a landing.
+	var rear_bottom = height - sin(tilt) * 0.95 - wheel_radius
+	var front_bottom = height + sin(tilt) * 0.95 - wheel_radius
+	var correction = maxf(ground_at(x - cos(tilt) * 0.95) - rear_bottom, ground_at(x + cos(tilt) * 0.95) - front_bottom)
+	if correction > 0.0:
+		height += correction
+		if vertical < 0.0:
+			vertical = -vertical * 0.10
+	# Crash on a severe rollover or a head-first impact.
+	if absf(tilt) > 1.72 or (grounded and absf(angular_velocity) > 7.5):
 		finished = true
+		label.text = "CRASH!  Tap RESTART"
 	bike.position = Vector3(x, height, 0)
 	bike.rotation.z = tilt
+	if is_instance_valid(rider):
+		rider.rotation.z = -lean * 0.17
+	for i in wheel_nodes.size():
+		var wheel = wheel_nodes[i]
+		wheel.rotation.y += speed * delta / wheel_radius
+		suspension[i] = lerpf(suspension[i], clampf((rear_penetration if i == 0 else front_penetration), 0.0, 0.2), minf(1.0, delta * 12.0))
+		wheel.position.y = -suspension[i] * 0.45
 	cam.position = cam.position.lerp(Vector3(x + 3.5, height + 4.0, 23), minf(1.0, delta * 3.0))
 	cam.look_at(Vector3(x + 3.5, height + 1.0, 0))
 	if x >= 230:
 		load_level(level + 1)
-	else:
+	elif not finished:
 		label.text = "%s   %0.1f s   %d / 5" % [NAMES[level], elapsed, level + 1]

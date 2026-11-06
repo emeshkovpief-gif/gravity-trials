@@ -79,10 +79,12 @@ func _ready() -> void:
 	ui.add_child(root)
 	label = Label.new()
 	label.position = Vector2(24, 16)
+	label.text = "Gravity Trials | DEBUG v2"
 	label.add_theme_font_size_override("font_size", 26)
 	root.add_child(label)
 	debug_label = Label.new()
 	debug_label.position = Vector2(24, 52)
+	debug_label.text = "DEBUG v2 | Starting scene..."
 	debug_label.add_theme_font_size_override("font_size", 17)
 	debug_label.add_theme_color_override("font_color", Color(1, 0.95, 0.2))
 	root.add_child(debug_label)
@@ -234,7 +236,7 @@ func load_level(n: int) -> void:
 
 func _physics_process(delta: float) -> void:
 	if is_instance_valid(debug_label):
-		debug_label.text = "3D CHECK | camera:%s | bike:%s | terrain:%s | FPS:%d" % [str(is_instance_valid(cam)), str(is_instance_valid(bike)), str(is_instance_valid(terrain)), Engine.get_frames_per_second()]
+		debug_label.text = "DEBUG v2 | 3D CHECK | camera:%s | bike:%s | terrain:%s | FPS:%d" % [str(is_instance_valid(cam)), str(is_instance_valid(bike)), str(is_instance_valid(terrain)), Engine.get_frames_per_second()]
 	if is_instance_valid(marker):
 		marker.position = Vector3(x, height + 3.0, 0)
 		marker.rotate_y(delta * 0.6)

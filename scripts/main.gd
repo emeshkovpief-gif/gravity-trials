@@ -124,6 +124,7 @@ func load_level(n: int) -> void:
 	suspension = [0.0, 0.0]
 	wheel_nodes.clear()
 	visual_wheels.clear()
+	external_bike = null
 	finished = false
 	if is_instance_valid(terrain):
 		terrain.queue_free()
@@ -151,6 +152,7 @@ func load_level(n: int) -> void:
 				# Asset is +Z forward; gameplay is +X forward.
 				external_bike.rotation.y = PI / 2.0
 				external_bike.position.y = -0.52
+				external_bike.scale = Vector3.ONE
 				external_bike.visible = true
 	
 	var use_fallback = not is_instance_valid(external_bike)

@@ -24,15 +24,22 @@ jobs:
           wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
           unzip -q Godot_v4.3-stable_export_templates.tpz
           cp templates/* ~/.local/share/godot/export_templates/4.3.stable/
-      - name: Download CC0 trials motorcycle
+      - name: Download CC0 Dirt Motorcycle
         run: |
           mkdir -p assets
-          curl --fail --location --retry 3 --output assets/trials_bike.glb https://cdn.3dassets.dev/assets/15417/v1/model.glb
-          test -s assets/trials_bike.glb
+          curl --fail --location --retry 3 --output assets/trials_bike.glb https://www.innerscene.com/api/library/dirt-motorcycle-0a9c8589/download
+          python3 - <<'PY'
+          import struct
+          data = open("assets/trials_bike.glb", "rb").read()
+          assert len(data) > 100000, "Downloaded file is too small"
+          magic, version, size = struct.unpack_from("<4sII", data)
+          assert magic == b"glTF" and version == 2 and size == len(data), "Invalid GLB file"
+          print("Validated Dirt Motorcycle GLB:", len(data), "bytes")
+          PY
       - name: Export Web
         run: |
           mkdir -p build/web
-          ./Godot_v4.3-stable_linux.x86_64 --headless --path . --import
+          ./Godot_v4.3-stable_linux.x86_64 --headless --path . --editor --quit
           ./Godot_v4.3-stable_linux.x86_64 --headless --path . --export-release Web build/web/index.html
           test -s build/web/index.wasm
           test -s build/web/index.pck

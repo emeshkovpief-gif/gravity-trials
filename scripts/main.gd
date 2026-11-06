@@ -49,6 +49,31 @@ func cylinder(parent: Node3D, radius: float, depth: float, pos: Vector3, color: 
 	parent.add_child(n)
 	return n
 
+func imported_bounds(root: Node3D) -> AABB:
+	var found := false
+	var result := AABB()
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		for child in node.get_children():
+			stack.append(child)
+		if node is MeshInstance3D:
+			var mesh_node := node as MeshInstance3D
+			if mesh_node.mesh == null:
+				continue
+			var local_box := mesh_node.get_aabb()
+			for xx in [0.0, 1.0]:
+				for yy in [0.0, 1.0]:
+					for zz in [0.0, 1.0]:
+						var corner := local_box.position + local_box.size * Vector3(xx, yy, zz)
+						var point: Vector3 = bike.to_local(mesh_node.to_global(corner))
+						if not found:
+							result = AABB(point, Vector3.ZERO)
+							found = true
+						else:
+							result = result.expand(point)
+	return result
+
 func surface(px: float) -> float:
 	var base := 0.65 * sin(px * 0.105) + 0.35 * sin(px * 0.29)
 	var ramps := 0.0
@@ -118,23 +143,33 @@ func _ready() -> void:
 		mountain.rotation.z = 0.2
 	bike = Node3D.new()
 	add_child(bike)
-	# Optional licensed Honda CRF 450 GLB. No unverified download URLs.
-	# Fallback geometry remains until asset is present and successfully imported.
+	# Import visual only; physics stays independent of the model.
 	if ResourceLoader.exists("res://assets/free_honda_crf_450.glb"):
-		var scene := load("res://assets/free_honda_crf_450.glb") as PackedScene
+		var scene: PackedScene = load("res://assets/free_honda_crf_450.glb") as PackedScene
 		if scene != null:
 			imported_motorcycle = scene.instantiate() as Node3D
 			if imported_motorcycle != null:
 				bike.add_child(imported_motorcycle)
-				# Sketchfab FBX uses Y as longitudinal and Z as vertical.
-				# Transform source axes: X->Z, Y->X, Z->Y.
+				# Sketchfab asset: convert Z-up to Y-up and face +X.
 				imported_motorcycle.basis = Basis(
 					Vector3(0, 0, 1),
 					Vector3(1, 0, 0),
 					Vector3(0, 1, 0)
 				)
-				imported_motorcycle.scale = Vector3.ONE * 0.048
-				imported_motorcycle.position = Vector3(0.02, 1.65, 0.01)
+				imported_motorcycle.position = Vector3.ZERO
+				# Compute actual mesh bounds instead of assuming the original FBX units.
+				var bounds: AABB = imported_bounds(imported_motorcycle)
+				if bounds.size.length() > 0.01:
+					var scale_factor: float = 1.95 / maxf(bounds.size.x, 0.01)
+					scale_factor = clampf(scale_factor, 0.001, 100.0)
+					imported_motorcycle.scale = Vector3.ONE * scale_factor
+					imported_motorcycle.position = Vector3(
+						-(bounds.position.x + bounds.size.x * 0.5) * scale_factor,
+						0.43 - bounds.position.y * scale_factor,
+						-(bounds.position.z + bounds.size.z * 0.5) * scale_factor
+					)
+				else:
+					imported_motorcycle.visible = false
 
 	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
 	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))
@@ -155,8 +190,8 @@ func _ready() -> void:
 	helmet.position = Vector3(-0.13, 2.19, 0)
 	helmet.material_override = mat(Color(0.98, 0.65, 0.08))
 	bike.add_child(helmet)
-	if is_instance_valid(imported_motorcycle):
-		# Keep original fallback wheel nodes for wheel physics, hide only their visuals.
+	if is_instance_valid(imported_motorcycle) and imported_motorcycle.visible:
+		# Hide fallback only after mesh bounds have been validated.
 		for node in bike.get_children():
 			if node != imported_motorcycle:
 				node.visible = false
@@ -266,8 +301,8 @@ func _physics_process(dt: float) -> void:
 	for i in wheel_visuals.size():
 		wheel_visuals[i].rotation.z -= velocity * dt / wheel_radius
 		wheel_visuals[i].position.y = -(rear_compression if i == 0 else front_compression) * 0.45
-	var look := Vector3(progress + 1.7, bike_y + 0.9, 0)
-	camera.position = camera.position.lerp(Vector3(progress + 1.7, bike_y + 2.8, 14.0), minf(1.0, dt * 5.0))
+	var look := Vector3(progress + 1.7, surface(progress) + 1.1, 0)
+	camera.position = camera.position.lerp(Vector3(progress + 1.7, surface(progress) + 3.0, 14.0), minf(1.0, dt * 5.0))
 	camera.look_at(look)
 	hud.text = "GRAVITY TRIALS 2.1  |  %0.1fs  |  %0.0fm" % [elapsed, progress]
 	if progress >= 180.0:

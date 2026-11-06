@@ -23,6 +23,7 @@ var asset_status := "Honda: not loaded"
 var honda_pivot: Node3D
 var fallback_parts: Array[Node3D] = []
 var show_honda := true
+var bike_visual_status: Label
 
 func mat(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -208,6 +209,10 @@ func _ready() -> void:
 	hud.position = Vector2(22, 16)
 	hud.add_theme_font_size_override("font_size", 25)
 	root.add_child(hud)
+	bike_visual_status = Label.new()
+	bike_visual_status.position = Vector2(22, 52)
+	bike_visual_status.add_theme_font_size_override("font_size", 18)
+	root.add_child(bike_visual_status)
 	for spec in [["back", "LEAN -", 0.02], ["forward", "LEAN +", 0.17], ["brake", "BRAKE", 0.70], ["gas", "GAS", 0.85]]:
 		var btn := Button.new()
 		btn.text = spec[1]
@@ -220,13 +225,14 @@ func _ready() -> void:
 		btn.button_down.connect(_set_button.bind(spec[0], true))
 		btn.button_up.connect(_set_button.bind(spec[0], false))
 	var model_button := Button.new()
-	model_button.text = "MODEL"
+	model_button.text = "MODEL: HONDA"
 	model_button.anchor_left = 0.57
 	model_button.anchor_right = 0.69
 	model_button.anchor_top = 0.02
 	model_button.anchor_bottom = 0.12
 	root.add_child(model_button)
 	model_button.pressed.connect(_toggle_model)
+	model_button.name = "ModelSwitch"
 	var restart := Button.new()
 	restart.text = "RESTART"
 	restart.anchor_left = 0.78
@@ -244,6 +250,8 @@ func _update_visuals() -> void:
 	for part in fallback_parts:
 		if is_instance_valid(part):
 			part.visible = not use_honda
+	if is_instance_valid(bike_visual_status):
+		bike_visual_status.text = "HONDA ACTIVE" if use_honda else "FALLBACK ACTIVE | " + asset_status
 
 func _toggle_model() -> void:
 	show_honda = not show_honda
@@ -266,7 +274,7 @@ func _reset() -> void:
 
 func _physics_process(dt: float) -> void:
 	if crashed:
-		hud.text = "CRASH! RESTART  |  GRAVITY TRIALS 2.1"
+		hud.text = "CRASH! RESTART | GRAVITY TRIALS 2.6"
 		return
 	elapsed += dt
 	var gas: bool = buttons["gas"] or Input.is_key_pressed(KEY_D)
@@ -331,6 +339,6 @@ func _physics_process(dt: float) -> void:
 	var look := Vector3(progress + 1.7, surface(progress) + 1.1, 0)
 	camera.position = camera.position.lerp(Vector3(progress + 1.7, surface(progress) + 3.0, 14.0), minf(1.0, dt * 5.0))
 	camera.look_at(look)
-	hud.text = "GRAVITY TRIALS 2.3 | %0.1fs | %0.0fm | y:%0.1f | %s" % [elapsed, progress, bike_y, asset_status]
+	hud.text = "GRAVITY TRIALS 2.6 | %0.1fs | %0.0fm | y:%0.1f" % [elapsed, progress, bike_y]
 	if progress >= 180.0:
 		_reset()

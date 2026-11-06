@@ -24,6 +24,11 @@ jobs:
           wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
           unzip -q Godot_v4.3-stable_export_templates.tpz
           cp templates/* ~/.local/share/godot/export_templates/4.3.stable/
+      - name: Download CC0 trials motorcycle
+        run: |
+          mkdir -p assets
+          curl --fail --location --retry 3 --output assets/trials_bike.glb https://cdn.3dassets.dev/assets/15417/v1/model.glb
+          test -s assets/trials_bike.glb
       - name: Export Web
         run: |
           mkdir -p build/web

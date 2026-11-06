@@ -120,8 +120,8 @@ func _ready() -> void:
 	add_child(bike)
 	# Optional licensed Honda CRF 450 GLB. No unverified download URLs.
 	# Fallback geometry remains until asset is present and successfully imported.
-	if ResourceLoader.exists("res://assets/honda_crf450.glb"):
-		var scene := load("res://assets/honda_crf450.glb") as PackedScene
+	if ResourceLoader.exists("res://assets/free_honda_crf_450.glb"):
+		var scene := load("res://assets/free_honda_crf_450.glb") as PackedScene
 		if scene != null:
 			imported_motorcycle = scene.instantiate() as Node3D
 			if imported_motorcycle != null:

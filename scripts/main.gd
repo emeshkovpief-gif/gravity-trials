@@ -37,6 +37,12 @@ func box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInsta
 	parent.add_child(node)
 	return node
 
+func beam(parent: Node3D, from_pos: Vector3, to_pos: Vector3, thickness: float, color: Color) -> void:
+	var center = (from_pos + to_pos) * 0.5
+	var direction = to_pos - from_pos
+	var segment = box(parent, Vector3(thickness, direction.length(), thickness), center, color)
+	segment.quaternion = Quaternion(Vector3.UP, direction.normalized())
+
 func ground_at(px: float) -> float:
 	var t = float(level + 1)
 	return sin(px * (0.085 + t * 0.008)) * (0.9 + t * 0.17) + sin(px * 0.21) * (0.25 + t * 0.12) + sin(px * 0.45) * t * 0.07
@@ -133,41 +139,65 @@ func load_level(n: int) -> void:
 	box(terrain, Vector3(0.3, 7, 5), Vector3(230, ground_at(230) + 3.5, 0), Color(0.1, 0.9, 0.5))
 	bike = Node3D.new()
 	add_child(bike)
-	box(bike, Vector3(2.4, 0.38, 0.6), Vector3(0, 0.55, 0), Color(0.1, 0.16, 0.2))
-	box(bike, Vector3(1.35, 0.43, 0.65), Vector3(0.05, 0.94, 0), Color(0.86, 0.12, 0.06))
-	box(bike, Vector3(0.7, 0.18, 0.8), Vector3(-0.3, 1.38, 0), Color(0.08, 0.08, 0.08))
+	# Procedural enduro silhouette: spoke wheels, frame triangle, tank, plastics, exhaust.
+	var rubber = Color(0.065, 0.069, 0.072)
+	var steel = Color(0.67, 0.72, 0.76)
+	var red = Color(0.9, 0.12, 0.065)
+	var dark = Color(0.12, 0.15, 0.18)
 	for offset in [-0.95, 0.95]:
-		var wheel = MeshInstance3D.new()
-		var mesh = CylinderMesh.new()
-		mesh.top_radius = 0.52
-		mesh.bottom_radius = 0.52
-		mesh.height = 0.28
-		wheel.mesh = mesh
-		wheel.rotation_degrees.x = 90
-		wheel.position = Vector3(offset, 0.0, 0)
-		wheel.material_override = material(Color(0.08, 0.09, 0.1))
-		bike.add_child(wheel)
-		wheel_nodes.append(wheel)
+		var assembly = Node3D.new()
+		assembly.position = Vector3(offset, 0, 0)
+		bike.add_child(assembly)
+		var tire = MeshInstance3D.new()
+		var tire_mesh = TorusMesh.new()
+		tire_mesh.inner_radius = 0.37
+		tire_mesh.outer_radius = 0.53
+		tire.mesh = tire_mesh
+		tire.rotation_degrees.x = 90
+		tire.material_override = material(rubber)
+		assembly.add_child(tire)
+		var hub = MeshInstance3D.new()
+		var hub_mesh = CylinderMesh.new()
+		hub_mesh.top_radius = 0.13
+		hub_mesh.bottom_radius = 0.13
+		hub_mesh.height = 0.36
+		hub.mesh = hub_mesh
+		hub.rotation_degrees.x = 90
+		hub.material_override = material(steel)
+		assembly.add_child(hub)
+		for spoke in range(12):
+			var a = float(spoke) * TAU / 12.0
+			var rod = box(assembly, Vector3(0.025, 0.74, 0.025), Vector3(sin(a) * 0.2, cos(a) * 0.2, 0), steel)
+			rod.rotation.z = -a
+		wheel_nodes.append(tire)
+	# Frame and chassis components
+	beam(bike, Vector3(-0.95, 0.0, 0), Vector3(-0.28, 0.94, 0), 0.12, steel)
+	beam(bike, Vector3(-0.28, 0.94, 0), Vector3(0.55, 0.66, 0), 0.13, steel)
+	beam(bike, Vector3(0.55, 0.66, 0), Vector3(-0.95, 0, 0), 0.12, steel)
+	beam(bike, Vector3(0.57, 1.28, 0), Vector3(0.95, 0, 0), 0.11, steel)
+	box(bike, Vector3(0.84, 0.5, 0.59), Vector3(0.19, 1.05, 0), red).rotation.z = -0.13
+	box(bike, Vector3(0.91, 0.16, 0.48), Vector3(-0.51, 1.25, 0), dark)
+	box(bike, Vector3(0.68, 0.11, 0.62), Vector3(0.93, 1.18, 0), red)
+	box(bike, Vector3(0.7, 0.12, 0.57), Vector3(-0.96, 0.63, 0), red)
+	box(bike, Vector3(0.54, 0.57, 0.5), Vector3(-0.18, 0.57, 0), Color(0.34, 0.37, 0.39))
+	box(bike, Vector3(0.6, 0.16, 0.2), Vector3(-0.65, 0.79, -0.36), steel)
+	beam(bike, Vector3(0.54, 1.29, -0.38), Vector3(0.95, 1.29, 0.38), 0.08, dark)
 	rider = Node3D.new()
 	bike.add_child(rider)
-	box(rider, Vector3(0.34, 0.85, 0.4), Vector3(-0.3, 1.85, 0), Color(0.18, 0.25, 0.65))
-	var head = MeshInstance3D.new()
+	box(rider, Vector3(0.45, 0.76, 0.46), Vector3(-0.4, 1.75, 0), Color(0.12, 0.22, 0.34)).rotation.z = -0.2
+	for side in [-0.27, 0.27]:
+		beam(rider, Vector3(-0.24, 2.03, side), Vector3(0.54, 1.34, side), 0.13, Color(0.15, 0.19, 0.24))
+		beam(rider, Vector3(-0.53, 1.43, side), Vector3(-0.23, 0.83, side), 0.19, Color(0.13, 0.16, 0.2))
+		beam(rider, Vector3(-0.23, 0.83, side), Vector3(0.09, 0.49, side), 0.17, Color(0.13, 0.16, 0.2))
+	var helmet = MeshInstance3D.new()
 	var sphere = SphereMesh.new()
-	sphere.radius = 0.34
-	sphere.height = 0.68
-	head.mesh = sphere
-	head.position = Vector3(-0.12, 2.52, 0)
-	head.material_override = material(Color(0.15, 0.17, 0.2))
-	rider.add_child(head)
-	# Simple articulated silhouette: arms reaching handlebars and bent legs.
-	for side in [-0.22, 0.22]:
-		box(rider, Vector3(0.92, 0.15, 0.14), Vector3(0.28, 1.79, side), Color(0.16, 0.2, 0.25)).rotation.z = -0.28
-		box(rider, Vector3(0.72, 0.2, 0.18), Vector3(-0.5, 1.18, side), Color(0.16, 0.2, 0.25)).rotation.z = 0.65
-	# Fork, swingarm, handlebars and exhaust
-	box(bike, Vector3(0.12, 1.3, 0.22), Vector3(0.92, 0.55, 0), Color(0.72, 0.76, 0.8))
-	box(bike, Vector3(0.9, 0.13, 0.22), Vector3(-0.53, 0.38, 0), Color(0.65, 0.68, 0.72))
-	box(bike, Vector3(0.5, 0.11, 0.9), Vector3(0.87, 1.27, 0), Color(0.12, 0.13, 0.15))
-	box(bike, Vector3(0.75, 0.19, 0.22), Vector3(-0.6, 0.8, -0.4), Color(0.6, 0.61, 0.64))
+	sphere.radius = 0.32
+	sphere.height = 0.64
+	helmet.mesh = sphere
+	helmet.position = Vector3(-0.21, 2.48, 0)
+	helmet.material_override = material(Color(0.91, 0.35, 0.08))
+	rider.add_child(helmet)
+	box(rider, Vector3(0.23, 0.13, 0.48), Vector3(0.03, 2.45, 0), dark)
 
 func _physics_process(delta: float) -> void:
 	if finished:
@@ -231,7 +261,7 @@ func _physics_process(delta: float) -> void:
 		rider.rotation.z = -lean * 0.17
 	for i in wheel_nodes.size():
 		var wheel = wheel_nodes[i]
-		wheel.rotation.y += speed * delta / wheel_radius
+		wheel.rotation.z -= speed * delta / wheel_radius
 		suspension[i] = lerpf(suspension[i], clampf((rear_penetration if i == 0 else front_penetration), 0.0, 0.2), minf(1.0, delta * 12.0))
 		wheel.position.y = -suspension[i] * 0.45
 	cam.position = cam.position.lerp(Vector3(x + 1.7, height + 2.4, 13), minf(1.0, delta * 3.0))

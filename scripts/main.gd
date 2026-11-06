@@ -21,6 +21,8 @@ var suspension = [0.0, 0.0]
 var angular_velocity = 0.0
 var grounded = false
 var last_speed = 0.0
+var external_bike: Node3D
+var visual_wheels: Array[Node3D] = []
 
 func material(c: Color) -> StandardMaterial3D:
 	var m = StandardMaterial3D.new()
@@ -121,6 +123,7 @@ func load_level(n: int) -> void:
 	last_speed = 0.0
 	suspension = [0.0, 0.0]
 	wheel_nodes.clear()
+	visual_wheels.clear()
 	finished = false
 	if is_instance_valid(terrain):
 		terrain.queue_free()
@@ -139,6 +142,18 @@ func load_level(n: int) -> void:
 	box(terrain, Vector3(0.3, 7, 5), Vector3(230, ground_at(230) + 3.5, 0), Color(0.1, 0.9, 0.5))
 	bike = Node3D.new()
 	add_child(bike)
+	if ResourceLoader.exists("res://assets/trials_bike.glb"):
+		var packed = load("res://assets/trials_bike.glb") as PackedScene
+		if packed != null:
+			external_bike = packed.instantiate() as Node3D
+			if external_bike != null:
+				bike.add_child(external_bike)
+				# Asset is +Z forward; gameplay is +X forward.
+				external_bike.rotation.y = PI / 2.0
+				external_bike.position.y = -0.52
+				external_bike.visible = true
+	
+	var use_fallback = not is_instance_valid(external_bike)
 	# Procedural enduro silhouette: spoke wheels, frame triangle, tank, plastics, exhaust.
 	var rubber = Color(0.065, 0.069, 0.072)
 	var steel = Color(0.67, 0.72, 0.76)
@@ -182,6 +197,10 @@ func load_level(n: int) -> void:
 	box(bike, Vector3(0.54, 0.57, 0.5), Vector3(-0.18, 0.57, 0), Color(0.34, 0.37, 0.39))
 	box(bike, Vector3(0.6, 0.16, 0.2), Vector3(-0.65, 0.79, -0.36), steel)
 	beam(bike, Vector3(0.54, 1.29, -0.38), Vector3(0.95, 1.29, 0.38), 0.08, dark)
+	if not use_fallback:
+		for child in bike.get_children():
+			if child != external_bike:
+				child.visible = false
 	rider = Node3D.new()
 	bike.add_child(rider)
 	box(rider, Vector3(0.45, 0.76, 0.46), Vector3(-0.4, 1.75, 0), Color(0.12, 0.22, 0.34)).rotation.z = -0.2
@@ -198,6 +217,13 @@ func load_level(n: int) -> void:
 	helmet.material_override = material(Color(0.91, 0.35, 0.08))
 	rider.add_child(helmet)
 	box(rider, Vector3(0.23, 0.13, 0.48), Vector3(0.03, 2.45, 0), dark)
+	if use_fallback:
+		pass
+	else:
+		# Hide procedural motorcycle while keeping rider visible.
+		for child in bike.get_children():
+			if child != external_bike and child != rider:
+				child.visible = false
 
 func _physics_process(delta: float) -> void:
 	if finished:

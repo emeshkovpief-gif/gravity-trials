@@ -19,6 +19,7 @@ var front_compression := 0.0
 var dust_timer := 0.0
 var dust: GPUParticles3D
 var imported_motorcycle: Node3D
+var asset_status := "Honda: not loaded"
 
 func mat(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -170,6 +171,7 @@ func _ready() -> void:
 					)
 				else:
 					imported_motorcycle.visible = false
+				asset_status = "Honda bounds: %s" % str(bounds.size)
 
 	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
 	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))
@@ -190,11 +192,8 @@ func _ready() -> void:
 	helmet.position = Vector3(-0.13, 2.19, 0)
 	helmet.material_override = mat(Color(0.98, 0.65, 0.08))
 	bike.add_child(helmet)
-	if is_instance_valid(imported_motorcycle) and imported_motorcycle.visible:
-		# Hide fallback only after mesh bounds have been validated.
-		for node in bike.get_children():
-			if node != imported_motorcycle:
-				node.visible = false
+	# Keep fallback visible for reliable diagnostics.
+
 	var ui := CanvasLayer.new()
 	add_child(ui)
 	var root := Control.new()
@@ -269,9 +268,9 @@ func _physics_process(dt: float) -> void:
 	velocity = clampf(velocity + acceleration * dt, -5.0, 19.0)
 	progress = clampf(progress + velocity * dt, 0.0, 180.0)
 	# Spring-damper response at each wheel; vertical motion is not snapped to ground.
-	var spring_force := maxf(0.0, rear_depth) * 135.0 + maxf(0.0, front_depth) * 135.0
+	var spring_force := clampf(maxf(0.0, rear_depth) * 65.0 + maxf(0.0, front_depth) * 65.0, 0.0, 55.0)
 	if grounded:
-		vertical_speed += (spring_force - vertical_speed * 13.0) * dt
+		vertical_speed += (spring_force - vertical_speed * 9.0) * dt
 		var slope := atan2(surface(front_x) - surface(rear_x), half_base * 2.0)
 		spin_speed += (slope - pitch) * 11.0 * dt
 		spin_speed += (front_depth - rear_depth) * 5.0 * dt
@@ -281,8 +280,11 @@ func _physics_process(dt: float) -> void:
 	else:
 		spin_speed *= maxf(0.0, 1.0 - 0.2 * dt)
 	spin_speed += lean * (5.5 if grounded else 4.0) * dt
+	spin_speed = clampf(spin_speed, -6.0, 6.0)
 	vertical_speed -= 24.0 * dt
+	vertical_speed = clampf(vertical_speed, -18.0, 12.0)
 	bike_y += vertical_speed * dt
+	bike_y = clampf(bike_y, surface(progress) - 0.2, surface(progress) + 5.0)
 	pitch += spin_speed * dt
 	# Positional collision correction after integrating movement.
 	var rear_floor := surface(progress - cos(pitch) * half_base) + wheel_radius + sin(pitch) * half_base
@@ -304,6 +306,6 @@ func _physics_process(dt: float) -> void:
 	var look := Vector3(progress + 1.7, surface(progress) + 1.1, 0)
 	camera.position = camera.position.lerp(Vector3(progress + 1.7, surface(progress) + 3.0, 14.0), minf(1.0, dt * 5.0))
 	camera.look_at(look)
-	hud.text = "GRAVITY TRIALS 2.1  |  %0.1fs  |  %0.0fm" % [elapsed, progress]
+	hud.text = "GRAVITY TRIALS 2.2 | %0.1fs | %0.0fm | y:%0.1f | %s" % [elapsed, progress, bike_y, asset_status]
 	if progress >= 180.0:
 		_reset()

@@ -23,6 +23,8 @@ var grounded = false
 var last_speed = 0.0
 var external_bike: Node3D
 var visual_wheels: Array[Node3D] = []
+var debug_label: Label
+var marker: MeshInstance3D
 
 func material(c: Color) -> StandardMaterial3D:
 	var m = StandardMaterial3D.new()
@@ -64,10 +66,12 @@ func _ready() -> void:
 	add_child(sun)
 	cam = Camera3D.new()
 	cam.position = Vector3(4, 4, 15)
-	cam.look_at(Vector3(4, 1, 0))
+	cam.rotation = Vector3.ZERO
 	cam.fov = 55
 	cam.current = true
 	add_child(cam)
+	cam.look_at(Vector3(4, 1, 0))
+	cam.far = 400.0
 	var ui = CanvasLayer.new()
 	add_child(ui)
 	var root = Control.new()
@@ -77,6 +81,14 @@ func _ready() -> void:
 	label.position = Vector2(24, 16)
 	label.add_theme_font_size_override("font_size", 26)
 	root.add_child(label)
+	debug_label = Label.new()
+	debug_label.position = Vector2(24, 52)
+	debug_label.add_theme_font_size_override("font_size", 17)
+	debug_label.add_theme_color_override("font_color", Color(1, 0.95, 0.2))
+	root.add_child(debug_label)
+	# High contrast 3D diagnostic cube, independent from motorcycle asset.
+	marker = box(self, Vector3(1.2, 1.2, 1.2), Vector3(4, 3.5, 0), Color(1.0, 0.0, 0.8))
+	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var controls = [["back", "BACK", 0.03], ["forward", "FWD", 0.18], ["brake", "BRAKE", 0.72], ["gas", "GAS", 0.87]]
 	for item in controls:
 		var b = Button.new()
@@ -221,6 +233,11 @@ func load_level(n: int) -> void:
 		external_bike.visible = false
 
 func _physics_process(delta: float) -> void:
+	if is_instance_valid(debug_label):
+		debug_label.text = "3D CHECK | camera:%s | bike:%s | terrain:%s | FPS:%d" % [str(is_instance_valid(cam)), str(is_instance_valid(bike)), str(is_instance_valid(terrain)), Engine.get_frames_per_second()]
+	if is_instance_valid(marker):
+		marker.position = Vector3(x, height + 3.0, 0)
+		marker.rotate_y(delta * 0.6)
 	if finished:
 		return
 	elapsed += delta

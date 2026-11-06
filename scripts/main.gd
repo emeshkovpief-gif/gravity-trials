@@ -50,10 +50,10 @@ func cylinder(parent: Node3D, radius: float, depth: float, pos: Vector3, color: 
 	parent.add_child(n)
 	return n
 
-func imported_bounds(root: Node3D) -> AABB:
+func bounds_in_parent(pivot: Node3D) -> AABB:
 	var found := false
 	var result := AABB()
-	var stack: Array[Node] = [root]
+	var stack: Array[Node] = [pivot]
 	while not stack.is_empty():
 		var node: Node = stack.pop_back()
 		for child in node.get_children():
@@ -67,7 +67,7 @@ func imported_bounds(root: Node3D) -> AABB:
 				for yy in [0.0, 1.0]:
 					for zz in [0.0, 1.0]:
 						var corner := local_box.position + local_box.size * Vector3(xx, yy, zz)
-						var point: Vector3 = root.to_local(mesh_node.to_global(corner))
+						var point: Vector3 = pivot.to_local(mesh_node.to_global(corner))
 						if not found:
 							result = AABB(point, Vector3.ZERO)
 							found = true
@@ -144,34 +144,34 @@ func _ready() -> void:
 		mountain.rotation.z = 0.2
 	bike = Node3D.new()
 	add_child(bike)
-	# Import visual only; physics stays independent of the model.
+	# Honda asset uses a nonstandard scale and Z-up coordinate system.
+	# Use an unscaled pivot so bounds and centering share one coordinate frame.
 	if ResourceLoader.exists("res://assets/free_honda_crf_450.glb"):
 		var scene: PackedScene = load("res://assets/free_honda_crf_450.glb") as PackedScene
 		if scene != null:
+			var pivot := Node3D.new()
+			bike.add_child(pivot)
 			imported_motorcycle = scene.instantiate() as Node3D
 			if imported_motorcycle != null:
-				bike.add_child(imported_motorcycle)
-				# Sketchfab asset: convert Z-up to Y-up and face +X.
+				pivot.add_child(imported_motorcycle)
 				imported_motorcycle.basis = Basis(
 					Vector3(0, 0, 1),
 					Vector3(1, 0, 0),
 					Vector3(0, 1, 0)
 				)
-				imported_motorcycle.position = Vector3.ZERO
-				# Compute actual mesh bounds instead of assuming the original FBX units.
-				var bounds: AABB = imported_bounds(imported_motorcycle)
-				if bounds.size.length() > 0.01:
-					var scale_factor: float = 1.95 / maxf(bounds.size.x, 0.01)
-					scale_factor = clampf(scale_factor, 0.001, 100.0)
-					imported_motorcycle.scale = Vector3.ONE * scale_factor
-					imported_motorcycle.position = Vector3(
+				var bounds: AABB = bounds_in_parent(pivot)
+				if bounds.size.x > 0.01 and bounds.size.y > 0.01:
+					var scale_factor: float = clampf(1.76 / bounds.size.x, 0.001, 10.0)
+					pivot.scale = Vector3.ONE * scale_factor
+					pivot.position = Vector3(
 						-(bounds.position.x + bounds.size.x * 0.5) * scale_factor,
 						0.43 - bounds.position.y * scale_factor,
 						-(bounds.position.z + bounds.size.z * 0.5) * scale_factor
 					)
+					asset_status = "HONDA READY %0.2f x %0.2f | scale:%0.4f" % [bounds.size.x, bounds.size.y, scale_factor]
 				else:
-					imported_motorcycle.visible = false
-				asset_status = "Honda local bounds: %s scale:%0.3f" % [str(bounds.size), imported_motorcycle.scale.x]
+					pivot.visible = false
+					asset_status = "HONDA INVALID BOUNDS"
 
 	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
 	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))

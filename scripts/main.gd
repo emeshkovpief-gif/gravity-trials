@@ -67,7 +67,7 @@ func imported_bounds(root: Node3D) -> AABB:
 				for yy in [0.0, 1.0]:
 					for zz in [0.0, 1.0]:
 						var corner := local_box.position + local_box.size * Vector3(xx, yy, zz)
-						var point: Vector3 = bike.to_local(mesh_node.to_global(corner))
+						var point: Vector3 = root.to_local(mesh_node.to_global(corner))
 						if not found:
 							result = AABB(point, Vector3.ZERO)
 							found = true
@@ -171,7 +171,7 @@ func _ready() -> void:
 					)
 				else:
 					imported_motorcycle.visible = false
-				asset_status = "Honda bounds: %s" % str(bounds.size)
+				asset_status = "Honda local bounds: %s scale:%0.3f" % [str(bounds.size), imported_motorcycle.scale.x]
 
 	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
 	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))
@@ -306,6 +306,6 @@ func _physics_process(dt: float) -> void:
 	var look := Vector3(progress + 1.7, surface(progress) + 1.1, 0)
 	camera.position = camera.position.lerp(Vector3(progress + 1.7, surface(progress) + 3.0, 14.0), minf(1.0, dt * 5.0))
 	camera.look_at(look)
-	hud.text = "GRAVITY TRIALS 2.2 | %0.1fs | %0.0fm | y:%0.1f | %s" % [elapsed, progress, bike_y, asset_status]
+	hud.text = "GRAVITY TRIALS 2.3 | %0.1fs | %0.0fm | y:%0.1f | %s" % [elapsed, progress, bike_y, asset_status]
 	if progress >= 180.0:
 		_reset()

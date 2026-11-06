@@ -20,6 +20,9 @@ var dust_timer := 0.0
 var dust: GPUParticles3D
 var imported_motorcycle: Node3D
 var asset_status := "Honda: not loaded"
+var honda_pivot: Node3D
+var fallback_parts: Array[Node3D] = []
+var show_honda := true
 
 func mat(color: Color) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -144,34 +147,31 @@ func _ready() -> void:
 		mountain.rotation.z = 0.2
 	bike = Node3D.new()
 	add_child(bike)
-	# Honda asset uses a nonstandard scale and Z-up coordinate system.
-	# Use an unscaled pivot so bounds and centering share one coordinate frame.
+	# Verified against uploaded Honda CRF450 GLB:
+	# original Y = length (42.45384), Z = height (26.68776), X = width (6.87774).
 	if ResourceLoader.exists("res://assets/free_honda_crf_450.glb"):
 		var scene: PackedScene = load("res://assets/free_honda_crf_450.glb") as PackedScene
 		if scene != null:
-			var pivot := Node3D.new()
-			bike.add_child(pivot)
+			honda_pivot = Node3D.new()
+			bike.add_child(honda_pivot)
 			imported_motorcycle = scene.instantiate() as Node3D
 			if imported_motorcycle != null:
-				pivot.add_child(imported_motorcycle)
+				honda_pivot.add_child(imported_motorcycle)
 				imported_motorcycle.basis = Basis(
 					Vector3(0, 0, 1),
 					Vector3(1, 0, 0),
 					Vector3(0, 1, 0)
 				)
-				var bounds: AABB = bounds_in_parent(pivot)
-				if bounds.size.x > 0.01 and bounds.size.y > 0.01:
-					var scale_factor: float = clampf(1.76 / bounds.size.x, 0.001, 10.0)
-					pivot.scale = Vector3.ONE * scale_factor
-					pivot.position = Vector3(
-						-(bounds.position.x + bounds.size.x * 0.5) * scale_factor,
-						0.43 - bounds.position.y * scale_factor,
-						-(bounds.position.z + bounds.size.z * 0.5) * scale_factor
-					)
-					asset_status = "HONDA READY %0.2f x %0.2f | scale:%0.4f" % [bounds.size.x, bounds.size.y, scale_factor]
-				else:
-					pivot.visible = false
-					asset_status = "HONDA INVALID BOUNDS"
+				var factor := 1.76 / 42.45383905
+				honda_pivot.scale = Vector3.ONE * factor
+				honda_pivot.position = Vector3(0.41456194 * factor, 0.43 + 25.41804979 * factor, 0.23212387 * factor)
+				asset_status = "HONDA GLB loaded | scale:%0.4f" % factor
+			else:
+				asset_status = "HONDA instantiate failed"
+		else:
+			asset_status = "HONDA load failed"
+	else:
+		asset_status = "HONDA GLB missing"
 
 	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
 	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))
@@ -194,6 +194,11 @@ func _ready() -> void:
 	bike.add_child(helmet)
 	# Keep fallback visible for reliable diagnostics.
 
+	# Keep fallback for explicit comparison, not layered over the Honda.
+	for child in bike.get_children():
+		if child != honda_pivot:
+			fallback_parts.append(child)
+	_update_visuals()
 	var ui := CanvasLayer.new()
 	add_child(ui)
 	var root := Control.new()
@@ -214,6 +219,14 @@ func _ready() -> void:
 		root.add_child(btn)
 		btn.button_down.connect(_set_button.bind(spec[0], true))
 		btn.button_up.connect(_set_button.bind(spec[0], false))
+	var model_button := Button.new()
+	model_button.text = "MODEL"
+	model_button.anchor_left = 0.57
+	model_button.anchor_right = 0.69
+	model_button.anchor_top = 0.02
+	model_button.anchor_bottom = 0.12
+	root.add_child(model_button)
+	model_button.pressed.connect(_toggle_model)
 	var restart := Button.new()
 	restart.text = "RESTART"
 	restart.anchor_left = 0.78
@@ -223,6 +236,18 @@ func _ready() -> void:
 	root.add_child(restart)
 	restart.pressed.connect(_reset)
 	_reset()
+
+func _update_visuals() -> void:
+	var use_honda := show_honda and is_instance_valid(honda_pivot) and is_instance_valid(imported_motorcycle)
+	if is_instance_valid(honda_pivot):
+		honda_pivot.visible = use_honda
+	for part in fallback_parts:
+		if is_instance_valid(part):
+			part.visible = not use_honda
+
+func _toggle_model() -> void:
+	show_honda = not show_honda
+	_update_visuals()
 
 func _set_button(which: String, pressed: bool) -> void:
 	buttons[which] = pressed

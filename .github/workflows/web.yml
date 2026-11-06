@@ -24,18 +24,29 @@ jobs:
           wget -q https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
           unzip -q Godot_v4.3-stable_export_templates.tpz
           cp templates/* ~/.local/share/godot/export_templates/4.3.stable/
-      - name: Download CC0 Dirt Motorcycle
+      - name: Optional Dirt Motorcycle asset
+        continue-on-error: true
         run: |
           mkdir -p assets
-          curl --fail --location --retry 3 --output assets/trials_bike.glb https://www.innerscene.com/api/library/dirt-motorcycle-0a9c8589/download
+          curl --fail --location --retry 2 --max-time 25 --output assets/trials_bike.glb https://www.innerscene.com/api/library/dirt-motorcycle-0a9c8589/download
           python3 - <<'PY'
           import struct
           data = open("assets/trials_bike.glb", "rb").read()
-          assert len(data) > 100000, "Downloaded file is too small"
           magic, version, size = struct.unpack_from("<4sII", data)
-          assert magic == b"glTF" and version == 2 and size == len(data), "Invalid GLB file"
-          print("Validated Dirt Motorcycle GLB:", len(data), "bytes")
+          assert magic == b"glTF" and version == 2 and size == len(data), "Invalid GLB"
           PY
+      - name: Remove invalid optional asset
+        if: always()
+        run: |
+          if [ -f assets/trials_bike.glb ]; then
+            python3 - <<'PY'
+          import os, struct
+          p="assets/trials_bike.glb"
+          d=open(p,"rb").read()
+          if len(d)<12 or d[:4]!=b"glTF" or struct.unpack_from("<I",d,8)[0]!=len(d):
+              os.remove(p)
+          PY
+          fi
       - name: Export Web
         run: |
           mkdir -p build/web

@@ -55,9 +55,9 @@ func _ready() -> void:
 	sun.shadow_enabled = true
 	add_child(sun)
 	cam = Camera3D.new()
-	cam.position = Vector3(4, 5, 22)
+	cam.position = Vector3(4, 4, 13)
 	cam.rotation_degrees = Vector3(-5, 0, 0)
-	cam.fov = 47
+	cam.fov = 43
 	cam.current = true
 	add_child(cam)
 	var ui = CanvasLayer.new()
@@ -69,7 +69,7 @@ func _ready() -> void:
 	label.position = Vector2(24, 16)
 	label.add_theme_font_size_override("font_size", 26)
 	root.add_child(label)
-	var controls = [["back", "↶", 0.03], ["forward", "↷", 0.18], ["brake", "BRAKE", 0.72], ["gas", "GAS", 0.87]]
+	var controls = [["back", "BACK", 0.03], ["forward", "FWD", 0.18], ["brake", "BRAKE", 0.72], ["gas", "GAS", 0.87]]
 	for item in controls:
 		var b = Button.new()
 		b.text = item[1]
@@ -122,19 +122,19 @@ func load_level(n: int) -> void:
 		bike.queue_free()
 	terrain = Node3D.new()
 	add_child(terrain)
-	var sand = [Color(0.66, 0.57, 0.36), Color(0.48, 0.46, 0.4), Color(0.29, 0.47, 0.28), Color(0.78, 0.58, 0.32), Color(0.5, 0.5, 0.54)][level]
+	var sand = [Color(0.39, 0.34, 0.23), Color(0.41, 0.38, 0.33), Color(0.23, 0.37, 0.20), Color(0.62, 0.42, 0.24), Color(0.36, 0.38, 0.39)][level]
 	for i in range(250):
 		var a = float(i)
 		var b = a + 1.0
 		var mid = (a + b) * 0.5
 		var slope = atan2(ground_at(b) - ground_at(a), 1.0)
-		var part = box(terrain, Vector3(1.03, 3.0, 6.0), Vector3(mid, (ground_at(a) + ground_at(b)) * 0.5 - 1.5, 0), sand)
+		var part = box(terrain, Vector3(1.03, 12.0, 12.0), Vector3(mid, (ground_at(a) + ground_at(b)) * 0.5 - 6.0, 0), sand)
 		part.rotation.z = slope
 	box(terrain, Vector3(0.3, 7, 5), Vector3(230, ground_at(230) + 3.5, 0), Color(0.1, 0.9, 0.5))
 	bike = Node3D.new()
 	add_child(bike)
 	box(bike, Vector3(2.4, 0.38, 0.6), Vector3(0, 0.55, 0), Color(0.1, 0.16, 0.2))
-	box(bike, Vector3(1.15, 0.65, 0.8), Vector3(0.15, 0.93, 0), Color(0.93, 0.17, 0.08))
+	box(bike, Vector3(1.35, 0.43, 0.65), Vector3(0.05, 0.94, 0), Color(0.86, 0.12, 0.06))
 	box(bike, Vector3(0.7, 0.18, 0.8), Vector3(-0.3, 1.38, 0), Color(0.08, 0.08, 0.08))
 	for offset in [-0.95, 0.95]:
 		var wheel = MeshInstance3D.new()
@@ -157,8 +157,12 @@ func load_level(n: int) -> void:
 	sphere.height = 0.68
 	head.mesh = sphere
 	head.position = Vector3(-0.12, 2.52, 0)
-	head.material_override = material(Color(0.96, 0.74, 0.12))
+	head.material_override = material(Color(0.15, 0.17, 0.2))
 	rider.add_child(head)
+	# Simple articulated silhouette: arms reaching handlebars and bent legs.
+	for side in [-0.22, 0.22]:
+		box(rider, Vector3(0.92, 0.15, 0.14), Vector3(0.28, 1.79, side), Color(0.16, 0.2, 0.25)).rotation.z = -0.28
+		box(rider, Vector3(0.72, 0.2, 0.18), Vector3(-0.5, 1.18, side), Color(0.16, 0.2, 0.25)).rotation.z = 0.65
 	# Fork, swingarm, handlebars and exhaust
 	box(bike, Vector3(0.12, 1.3, 0.22), Vector3(0.92, 0.55, 0), Color(0.72, 0.76, 0.8))
 	box(bike, Vector3(0.9, 0.13, 0.22), Vector3(-0.53, 0.38, 0), Color(0.65, 0.68, 0.72))
@@ -230,8 +234,8 @@ func _physics_process(delta: float) -> void:
 		wheel.rotation.y += speed * delta / wheel_radius
 		suspension[i] = lerpf(suspension[i], clampf((rear_penetration if i == 0 else front_penetration), 0.0, 0.2), minf(1.0, delta * 12.0))
 		wheel.position.y = -suspension[i] * 0.45
-	cam.position = cam.position.lerp(Vector3(x + 3.5, height + 4.0, 23), minf(1.0, delta * 3.0))
-	cam.look_at(Vector3(x + 3.5, height + 1.0, 0))
+	cam.position = cam.position.lerp(Vector3(x + 1.7, height + 2.4, 13), minf(1.0, delta * 3.0))
+	cam.look_at(Vector3(x + 1.7, height + 0.8, 0))
 	if x >= 230:
 		load_level(level + 1)
 	elif not finished:

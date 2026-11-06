@@ -63,9 +63,9 @@ func _ready() -> void:
 	sun.shadow_enabled = true
 	add_child(sun)
 	cam = Camera3D.new()
-	cam.position = Vector3(4, 4, 13)
-	cam.rotation_degrees = Vector3(-5, 0, 0)
-	cam.fov = 43
+	cam.position = Vector3(4, 4, 15)
+	cam.look_at(Vector3(4, 1, 0))
+	cam.fov = 55
 	cam.current = true
 	add_child(cam)
 	var ui = CanvasLayer.new()
@@ -199,10 +199,7 @@ func load_level(n: int) -> void:
 	box(bike, Vector3(0.54, 0.57, 0.5), Vector3(-0.18, 0.57, 0), Color(0.34, 0.37, 0.39))
 	box(bike, Vector3(0.6, 0.16, 0.2), Vector3(-0.65, 0.79, -0.36), steel)
 	beam(bike, Vector3(0.54, 1.29, -0.38), Vector3(0.95, 1.29, 0.38), 0.08, dark)
-	if not use_fallback:
-		for child in bike.get_children():
-			if child != external_bike:
-				child.visible = false
+	
 	rider = Node3D.new()
 	bike.add_child(rider)
 	box(rider, Vector3(0.45, 0.76, 0.46), Vector3(-0.4, 1.75, 0), Color(0.12, 0.22, 0.34)).rotation.z = -0.2
@@ -219,13 +216,9 @@ func load_level(n: int) -> void:
 	helmet.material_override = material(Color(0.91, 0.35, 0.08))
 	rider.add_child(helmet)
 	box(rider, Vector3(0.23, 0.13, 0.48), Vector3(0.03, 2.45, 0), dark)
-	if use_fallback:
-		pass
-	else:
-		# Hide procedural motorcycle while keeping rider visible.
-		for child in bike.get_children():
-			if child != external_bike and child != rider:
-				child.visible = false
+	if not use_fallback:
+		# Keep a visible fallback until the imported model is visually verified.
+		external_bike.visible = false
 
 func _physics_process(delta: float) -> void:
 	if finished:
@@ -292,8 +285,8 @@ func _physics_process(delta: float) -> void:
 		wheel.rotation.z -= speed * delta / wheel_radius
 		suspension[i] = lerpf(suspension[i], clampf((rear_penetration if i == 0 else front_penetration), 0.0, 0.2), minf(1.0, delta * 12.0))
 		wheel.position.y = -suspension[i] * 0.45
-	cam.position = cam.position.lerp(Vector3(x + 1.7, height + 2.4, 13), minf(1.0, delta * 3.0))
-	cam.look_at(Vector3(x + 1.7, height + 0.8, 0))
+	cam.position = cam.position.lerp(Vector3(x + 1.0, height + 3.0, 16), minf(1.0, delta * 3.0))
+	cam.look_at(Vector3(x + 1.0, height + 0.5, 0))
 	if x >= 230:
 		load_level(level + 1)
 	elif not finished:

@@ -1,312 +1,179 @@
 extends Node3D
-
-const NAMES = ["Training Hills", "Rocky Canyon", "Forest Trial", "Desert Jump", "Extreme Ridge"]
-var level = 0
+# Gravity Trials 2.0 — clean, dependency-free mobile Web baseline.
+const VERSION = "2.0.0"
 var bike: Node3D
-var cam: Camera3D
-var label: Label
-var elapsed = 0.0
-var x = 4.0
-var height = 3.0
-var speed = 0.0
-var vertical = 0.0
-var tilt = 0.0
-var turn = 0.0
-var finished = false
-var held = {"gas": false, "brake": false, "back": false, "forward": false}
-var terrain: Node3D
-var wheel_nodes: Array[MeshInstance3D] = []
-var rider: Node3D
-var suspension = [0.0, 0.0]
-var angular_velocity = 0.0
-var grounded = false
-var last_speed = 0.0
-var external_bike: Node3D
-var visual_wheels: Array[Node3D] = []
-var debug_label: Label
-var marker: MeshInstance3D
+var camera: Camera3D
+var hud: Label
+var buttons := {"gas": false, "brake": false, "back": false, "forward": false}
+var progress := 0.0
+var velocity := 0.0
+var bike_y := 1.05
+var pitch := 0.0
+var elapsed := 0.0
+var wheel_visuals: Array[Node3D] = []
 
-func material(c: Color) -> StandardMaterial3D:
-	var m = StandardMaterial3D.new()
-	m.albedo_color = c
+func mat(color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	return m
 
-func box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
-	var node = MeshInstance3D.new()
-	var mesh = BoxMesh.new()
-	mesh.size = size
-	node.mesh = mesh
-	node.material_override = material(color)
-	node.position = pos
-	parent.add_child(node)
-	return node
+func cube(parent: Node3D, dimensions: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
+	var n := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = dimensions
+	n.mesh = mesh
+	n.material_override = mat(color)
+	n.position = pos
+	parent.add_child(n)
+	return n
 
-func beam(parent: Node3D, from_pos: Vector3, to_pos: Vector3, thickness: float, color: Color) -> void:
-	var center = (from_pos + to_pos) * 0.5
-	var direction = to_pos - from_pos
-	var segment = box(parent, Vector3(thickness, direction.length(), thickness), center, color)
-	segment.quaternion = Quaternion(Vector3.UP, direction.normalized())
+func cylinder(parent: Node3D, radius: float, depth: float, pos: Vector3, color: Color) -> MeshInstance3D:
+	var n := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = depth
+	n.mesh = mesh
+	n.material_override = mat(color)
+	n.position = pos
+	n.rotation.x = PI / 2.0
+	parent.add_child(n)
+	return n
 
-func ground_at(px: float) -> float:
-	var t = float(level + 1)
-	return sin(px * (0.085 + t * 0.008)) * (0.9 + t * 0.17) + sin(px * 0.21) * (0.25 + t * 0.12) + sin(px * 0.45) * t * 0.07
+func surface(px: float) -> float:
+	return 0.35 * sin(px * 0.16) + 0.22 * sin(px * 0.31)
 
 func _ready() -> void:
-	var env = WorldEnvironment.new()
-	var e = Environment.new()
-	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.53, 0.72, 0.91)
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.9, 0.9, 1.0)
-	env.environment = e
-	add_child(env)
-	var sun = DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48, -30, -20)
-	sun.shadow_enabled = true
+	var world := WorldEnvironment.new()
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.58, 0.77, 0.94)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.95, 0.95, 1.0)
+	world.environment = environment
+	add_child(world)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-45, -25, -20)
+	sun.shadow_enabled = false
 	add_child(sun)
-	cam = Camera3D.new()
-	cam.position = Vector3(4, 4, 15)
-	cam.rotation = Vector3.ZERO
-	cam.fov = 55
-	cam.current = true
-	add_child(cam)
-	cam.look_at(Vector3(4, 1, 0))
-	cam.far = 400.0
-	var ui = CanvasLayer.new()
+	camera = Camera3D.new()
+	add_child(camera)
+	camera.current = true
+	camera.fov = 55.0
+	camera.near = 0.05
+	camera.far = 300.0
+	# One solid continuous surface; no individually rotated terrain blocks.
+	var ground := MeshInstance3D.new()
+	var mesh := ArrayMesh.new()
+	var vertices := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for i in range(201):
+		var xx := float(i) - 10.0
+		var yy := surface(xx)
+		vertices.append(Vector3(xx, yy, 2.0))
+		vertices.append(Vector3(xx, yy, -2.0))
+		vertices.append(Vector3(xx, -7.0, 2.0))
+		vertices.append(Vector3(xx, -7.0, -2.0))
+	for i in range(200):
+		var j := i * 4
+		indices.append_array(PackedInt32Array([j, j+1, j+4, j+1, j+5, j+4]))
+		indices.append_array(PackedInt32Array([j+2, j, j+6, j, j+4, j+6]))
+		indices.append_array(PackedInt32Array([j+1, j+3, j+5, j+3, j+7, j+5]))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_INDEX] = indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	ground.mesh = mesh
+	var dirt := mat(Color(0.48, 0.34, 0.22))
+	dirt.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ground.material_override = dirt
+	add_child(ground)
+	bike = Node3D.new()
+	add_child(bike)
+	cube(bike, Vector3(1.65, 0.20, 0.3), Vector3(0, 0.55, 0), Color(0.19, 0.21, 0.23))
+	cube(bike, Vector3(0.92, 0.38, 0.48), Vector3(0.15, 0.88, 0), Color(0.88, 0.13, 0.07))
+	cube(bike, Vector3(0.78, 0.12, 0.45), Vector3(-0.35, 1.16, 0), Color(0.1, 0.11, 0.13))
+	for side in [-0.88, 0.88]:
+		var wheel := Node3D.new()
+		wheel.position.x = side
+		bike.add_child(wheel)
+		cylinder(wheel, 0.43, 0.22, Vector3.ZERO, Color(0.055, 0.06, 0.07))
+		cylinder(wheel, 0.23, 0.25, Vector3.ZERO, Color(0.64, 0.67, 0.7))
+		wheel_visuals.append(wheel)
+	cube(bike, Vector3(0.38, 0.78, 0.35), Vector3(-0.26, 1.64, 0), Color(0.18, 0.23, 0.33))
+	var helmet := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.26
+	sphere.height = 0.52
+	helmet.mesh = sphere
+	helmet.position = Vector3(-0.13, 2.19, 0)
+	helmet.material_override = mat(Color(0.98, 0.65, 0.08))
+	bike.add_child(helmet)
+	var ui := CanvasLayer.new()
 	add_child(ui)
-	var root = Control.new()
+	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	ui.add_child(root)
-	label = Label.new()
-	label.position = Vector2(24, 16)
-	label.text = "Gravity Trials | DEBUG v2"
-	label.add_theme_font_size_override("font_size", 26)
-	root.add_child(label)
-	debug_label = Label.new()
-	debug_label.position = Vector2(24, 52)
-	debug_label.text = "DEBUG v2 | Starting scene..."
-	debug_label.add_theme_font_size_override("font_size", 17)
-	debug_label.add_theme_color_override("font_color", Color(1, 0.95, 0.2))
-	root.add_child(debug_label)
-	# High contrast 3D diagnostic cube, independent from motorcycle asset.
-	marker = box(self, Vector3(1.2, 1.2, 1.2), Vector3(4, 3.5, 0), Color(1.0, 0.0, 0.8))
-	marker.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var controls = [["back", "BACK", 0.03], ["forward", "FWD", 0.18], ["brake", "BRAKE", 0.72], ["gas", "GAS", 0.87]]
-	for item in controls:
-		var b = Button.new()
-		b.text = item[1]
-		b.anchor_left = item[2]
-		b.anchor_right = item[2] + 0.11
-		b.anchor_top = 0.79
-		b.anchor_bottom = 0.96
-		b.offset_left = 0
-		b.offset_right = 0
-		b.offset_top = 0
-		b.offset_bottom = 0
-		b.add_theme_font_size_override("font_size", 22)
-		root.add_child(b)
-		b.button_down.connect(_press.bind(item[0], true))
-		b.button_up.connect(_press.bind(item[0], false))
-	var restart = Button.new()
+	hud = Label.new()
+	hud.position = Vector2(22, 16)
+	hud.add_theme_font_size_override("font_size", 25)
+	root.add_child(hud)
+	for spec in [["back", "LEAN -", 0.02], ["forward", "LEAN +", 0.17], ["brake", "BRAKE", 0.70], ["gas", "GAS", 0.85]]:
+		var btn := Button.new()
+		btn.text = spec[1]
+		btn.anchor_left = spec[2]
+		btn.anchor_right = spec[2] + 0.13
+		btn.anchor_top = 0.79
+		btn.anchor_bottom = 0.96
+		btn.add_theme_font_size_override("font_size", 19)
+		root.add_child(btn)
+		btn.button_down.connect(_set_button.bind(spec[0], true))
+		btn.button_up.connect(_set_button.bind(spec[0], false))
+	var restart := Button.new()
 	restart.text = "RESTART"
 	restart.anchor_left = 0.78
 	restart.anchor_right = 0.96
-	restart.anchor_top = 0.03
+	restart.anchor_top = 0.02
 	restart.anchor_bottom = 0.12
 	root.add_child(restart)
-	restart.pressed.connect(_restart)
-	load_level(0)
+	restart.pressed.connect(_reset)
+	_reset()
 
-func _press(key: String, value: bool) -> void:
-	held[key] = value
+func _set_button(which: String, pressed: bool) -> void:
+	buttons[which] = pressed
 
-func _restart() -> void:
-	load_level(level)
-
-func load_level(n: int) -> void:
-	level = n % NAMES.size()
+func _reset() -> void:
+	progress = 0.0
+	velocity = 0.0
 	elapsed = 0.0
-	x = 4.0
-	height = ground_at(x) + 1.3
-	speed = 0.0
-	vertical = 0.0
-	tilt = 0.0
-	turn = 0.0
-	angular_velocity = 0.0
-	grounded = false
-	last_speed = 0.0
-	suspension = [0.0, 0.0]
-	wheel_nodes.clear()
-	visual_wheels.clear()
-	external_bike = null
-	finished = false
-	if is_instance_valid(terrain):
-		terrain.queue_free()
-	if is_instance_valid(bike):
-		bike.queue_free()
-	terrain = Node3D.new()
-	add_child(terrain)
-	var sand = [Color(0.39, 0.34, 0.23), Color(0.41, 0.38, 0.33), Color(0.23, 0.37, 0.20), Color(0.62, 0.42, 0.24), Color(0.36, 0.38, 0.39)][level]
-	for i in range(250):
-		var a = float(i)
-		var b = a + 1.0
-		var mid = (a + b) * 0.5
-		var slope = atan2(ground_at(b) - ground_at(a), 1.0)
-		var part = box(terrain, Vector3(1.03, 12.0, 12.0), Vector3(mid, (ground_at(a) + ground_at(b)) * 0.5 - 6.0, 0), sand)
-		part.rotation.z = slope
-	box(terrain, Vector3(0.3, 7, 5), Vector3(230, ground_at(230) + 3.5, 0), Color(0.1, 0.9, 0.5))
-	bike = Node3D.new()
-	add_child(bike)
-	if ResourceLoader.exists("res://assets/trials_bike.glb"):
-		var packed = load("res://assets/trials_bike.glb") as PackedScene
-		if packed != null:
-			external_bike = packed.instantiate() as Node3D
-			if external_bike != null:
-				bike.add_child(external_bike)
-				# Asset is +Z forward; gameplay is +X forward.
-				external_bike.rotation.y = PI / 2.0
-				external_bike.position.y = -0.52
-				external_bike.scale = Vector3.ONE
-				external_bike.visible = true
-	
-	var use_fallback = not is_instance_valid(external_bike)
-	# Procedural enduro silhouette: spoke wheels, frame triangle, tank, plastics, exhaust.
-	var rubber = Color(0.065, 0.069, 0.072)
-	var steel = Color(0.67, 0.72, 0.76)
-	var red = Color(0.9, 0.12, 0.065)
-	var dark = Color(0.12, 0.15, 0.18)
-	for offset in [-0.95, 0.95]:
-		var assembly = Node3D.new()
-		assembly.position = Vector3(offset, 0, 0)
-		bike.add_child(assembly)
-		var tire = MeshInstance3D.new()
-		var tire_mesh = TorusMesh.new()
-		tire_mesh.inner_radius = 0.37
-		tire_mesh.outer_radius = 0.53
-		tire.mesh = tire_mesh
-		tire.rotation_degrees.x = 90
-		tire.material_override = material(rubber)
-		assembly.add_child(tire)
-		var hub = MeshInstance3D.new()
-		var hub_mesh = CylinderMesh.new()
-		hub_mesh.top_radius = 0.13
-		hub_mesh.bottom_radius = 0.13
-		hub_mesh.height = 0.36
-		hub.mesh = hub_mesh
-		hub.rotation_degrees.x = 90
-		hub.material_override = material(steel)
-		assembly.add_child(hub)
-		for spoke in range(12):
-			var a = float(spoke) * TAU / 12.0
-			var rod = box(assembly, Vector3(0.025, 0.74, 0.025), Vector3(sin(a) * 0.2, cos(a) * 0.2, 0), steel)
-			rod.rotation.z = -a
-		wheel_nodes.append(tire)
-	# Frame and chassis components
-	beam(bike, Vector3(-0.95, 0.0, 0), Vector3(-0.28, 0.94, 0), 0.12, steel)
-	beam(bike, Vector3(-0.28, 0.94, 0), Vector3(0.55, 0.66, 0), 0.13, steel)
-	beam(bike, Vector3(0.55, 0.66, 0), Vector3(-0.95, 0, 0), 0.12, steel)
-	beam(bike, Vector3(0.57, 1.28, 0), Vector3(0.95, 0, 0), 0.11, steel)
-	box(bike, Vector3(0.84, 0.5, 0.59), Vector3(0.19, 1.05, 0), red).rotation.z = -0.13
-	box(bike, Vector3(0.91, 0.16, 0.48), Vector3(-0.51, 1.25, 0), dark)
-	box(bike, Vector3(0.68, 0.11, 0.62), Vector3(0.93, 1.18, 0), red)
-	box(bike, Vector3(0.7, 0.12, 0.57), Vector3(-0.96, 0.63, 0), red)
-	box(bike, Vector3(0.54, 0.57, 0.5), Vector3(-0.18, 0.57, 0), Color(0.34, 0.37, 0.39))
-	box(bike, Vector3(0.6, 0.16, 0.2), Vector3(-0.65, 0.79, -0.36), steel)
-	beam(bike, Vector3(0.54, 1.29, -0.38), Vector3(0.95, 1.29, 0.38), 0.08, dark)
-	
-	rider = Node3D.new()
-	bike.add_child(rider)
-	box(rider, Vector3(0.45, 0.76, 0.46), Vector3(-0.4, 1.75, 0), Color(0.12, 0.22, 0.34)).rotation.z = -0.2
-	for side in [-0.27, 0.27]:
-		beam(rider, Vector3(-0.24, 2.03, side), Vector3(0.54, 1.34, side), 0.13, Color(0.15, 0.19, 0.24))
-		beam(rider, Vector3(-0.53, 1.43, side), Vector3(-0.23, 0.83, side), 0.19, Color(0.13, 0.16, 0.2))
-		beam(rider, Vector3(-0.23, 0.83, side), Vector3(0.09, 0.49, side), 0.17, Color(0.13, 0.16, 0.2))
-	var helmet = MeshInstance3D.new()
-	var sphere = SphereMesh.new()
-	sphere.radius = 0.32
-	sphere.height = 0.64
-	helmet.mesh = sphere
-	helmet.position = Vector3(-0.21, 2.48, 0)
-	helmet.material_override = material(Color(0.91, 0.35, 0.08))
-	rider.add_child(helmet)
-	box(rider, Vector3(0.23, 0.13, 0.48), Vector3(0.03, 2.45, 0), dark)
-	if not use_fallback:
-		# Keep a visible fallback until the imported model is visually verified.
-		external_bike.visible = false
+	pitch = 0.0
+	bike_y = surface(progress) + 0.45
 
-func _physics_process(delta: float) -> void:
-	if is_instance_valid(debug_label):
-		debug_label.text = "DEBUG v2 | 3D CHECK | camera:%s | bike:%s | terrain:%s | FPS:%d" % [str(is_instance_valid(cam)), str(is_instance_valid(bike)), str(is_instance_valid(terrain)), Engine.get_frames_per_second()]
-	if is_instance_valid(marker):
-		marker.position = Vector3(x, height + 3.0, 0)
-		marker.rotate_y(delta * 0.6)
-	if finished:
-		return
-	elapsed += delta
-	var gas = held["gas"] or Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D)
-	var brake = held["brake"] or Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A)
-	var lean = float(int(held["forward"] or Input.is_key_pressed(KEY_UP))) - float(int(held["back"] or Input.is_key_pressed(KEY_DOWN)))
-	var wheel_radius = 0.52
-	var rear_x = x - cos(tilt) * 0.95
-	var front_x = x + cos(tilt) * 0.95
-	var rear_y = height - sin(tilt) * 0.95
-	var front_y = height + sin(tilt) * 0.95
-	var rear_penetration = ground_at(rear_x) + wheel_radius - rear_y
-	var front_penetration = ground_at(front_x) + wheel_radius - front_y
-	var rear_contact = rear_penetration > -0.07
-	var front_contact = front_penetration > -0.07
-	grounded = rear_contact or front_contact
-	var throttle_force = 0.0
+func _physics_process(dt: float) -> void:
+	elapsed += dt
+	var gas: bool = buttons["gas"] or Input.is_key_pressed(KEY_D)
+	var brake: bool = buttons["brake"] or Input.is_key_pressed(KEY_A)
+	var lean: float = float(int(buttons["forward"])) - float(int(buttons["back"]))
 	if gas:
-		throttle_force = 18.0 if rear_contact else 2.0
+		velocity += 7.0 * dt
 	elif brake:
-		throttle_force = -25.0 if grounded else -1.0
+		velocity -= 10.0 * dt
 	else:
-		throttle_force = -4.0 if grounded else -0.5
-	speed += throttle_force * delta
-	speed = clampf(speed, -7.0, 25.0)
-	var previous_x = x
-	x = clampf(x + speed * delta, 0.0, 235.0)
-	if grounded:
-		var slope = atan2(ground_at(front_x) - ground_at(rear_x), 1.9)
-		var compression = maxf(0.0, maxf(rear_penetration, front_penetration))
-		vertical += (compression * 105.0 - vertical * 13.0) * delta
-		angular_velocity += (slope - tilt) * (9.0 if rear_contact and front_contact else 3.0) * delta
-		angular_velocity += (front_penetration - rear_penetration) * 2.4 * delta
-		angular_velocity += lean * 5.0 * delta
-		if gas and rear_contact:
-			angular_velocity += 1.15 * delta
-		angular_velocity *= maxf(0.0, 1.0 - 3.0 * delta)
-	else:
-		angular_velocity += lean * 4.2 * delta
-		angular_velocity *= maxf(0.0, 1.0 - 0.18 * delta)
-	vertical -= 23.0 * delta
-	height += vertical * delta
-	tilt += angular_velocity * delta
-	# Prevent wheels from tunneling into terrain after a landing.
-	var rear_bottom = height - sin(tilt) * 0.95 - wheel_radius
-	var front_bottom = height + sin(tilt) * 0.95 - wheel_radius
-	var correction = maxf(ground_at(x - cos(tilt) * 0.95) - rear_bottom, ground_at(x + cos(tilt) * 0.95) - front_bottom)
-	if correction > 0.0:
-		height += correction
-		if vertical < 0.0:
-			vertical = -vertical * 0.10
-	# Crash on a severe rollover or a head-first impact.
-	if absf(tilt) > 1.72 or (grounded and absf(angular_velocity) > 7.5):
-		finished = true
-		label.text = "CRASH!  Tap RESTART"
-	bike.position = Vector3(x, height, 0)
-	bike.rotation.z = tilt
-	if is_instance_valid(rider):
-		rider.rotation.z = -lean * 0.17
-	for i in wheel_nodes.size():
-		var wheel = wheel_nodes[i]
-		wheel.rotation.z -= speed * delta / wheel_radius
-		suspension[i] = lerpf(suspension[i], clampf((rear_penetration if i == 0 else front_penetration), 0.0, 0.2), minf(1.0, delta * 12.0))
-		wheel.position.y = -suspension[i] * 0.45
-	cam.position = cam.position.lerp(Vector3(x + 1.0, height + 3.0, 16), minf(1.0, delta * 3.0))
-	cam.look_at(Vector3(x + 1.0, height + 0.5, 0))
-	if x >= 230:
-		load_level(level + 1)
-	elif not finished:
-		label.text = "%s   %0.1f s   %d / 5" % [NAMES[level], elapsed, level + 1]
+		velocity = move_toward(velocity, 0.0, 3.0 * dt)
+	velocity = clampf(velocity, -4.0, 14.0)
+	progress = clampf(progress + velocity * dt, 0.0, 180.0)
+	var target_pitch := atan2(surface(progress + 0.88) - surface(progress - 0.88), 1.76)
+	pitch = lerp_angle(pitch, target_pitch + lean * 0.12, minf(1.0, 5.0 * dt))
+	bike_y = lerpf(bike_y, surface(progress) + 0.45, minf(1.0, 12.0 * dt))
+	bike.position = Vector3(progress, bike_y, 0)
+	bike.rotation.z = pitch
+	for wheel in wheel_visuals:
+		wheel.rotation.z -= velocity * dt / 0.43
+	var look := Vector3(progress + 1.0, bike_y + 1.0, 0)
+	camera.position = Vector3(progress + 1.0, bike_y + 2.7, 13.0)
+	camera.look_at(look)
+	hud.text = "GRAVITY TRIALS 2.0  |  %0.1fs  |  %0.0fm" % [elapsed, progress]
+	if progress >= 180.0:
+		_reset()
